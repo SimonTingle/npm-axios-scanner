@@ -14,7 +14,7 @@
 # - Safe for read-only scanning in GitHub Actions and other CI systems
 ################################################################################
 
-set -euo pipefail
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -27,12 +27,12 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Known malicious hashes (sha256)
-declare -A MALICIOUS_HASHES=(
-    ["windows_powershell_stager"]="WINDOWS_POWERSHELL_HASH_IOC"
-    ["linux_python_script"]="LINUX_PYTHON_HASH_IOC"
-    ["macos_binary_1"]="MACOS_BINARY_HASH_IOC_1"
-    ["macos_binary_2"]="MACOS_BINARY_HASH_IOC_2"
+# Known malicious hashes (sha256) - placeholder values
+MALICIOUS_HASHES=(
+    "WINDOWS_POWERSHELL_HASH_IOC"
+    "LINUX_PYTHON_HASH_IOC"
+    "MACOS_BINARY_HASH_IOC_1"
+    "MACOS_BINARY_HASH_IOC_2"
 )
 
 # Vulnerable package versions
@@ -118,7 +118,7 @@ log() {
 log INFO "Starting NPM Axios Supply Chain Attack Scanner"
 log INFO "Scan timestamp: $TIMESTAMP"
 log INFO "Log file: $LOG_FILE"
-log DEBUG "Scan paths: ${SCAN_PATHS[@]}"
+log DEBUG "Scan paths: ${SCAN_PATHS[*]}"
 
 # Function to check package.json files
 check_package_json() {
@@ -126,7 +126,7 @@ check_package_json() {
     log DEBUG "Checking package.json: $path"
 
     if [[ ! -f "$path" ]]; then
-        return
+        return 0
     fi
 
     for pkg in "${VULNERABLE_PACKAGES[@]}"; do
@@ -179,10 +179,10 @@ check_file_hashes() {
         local file_hash
         file_hash=$(shasum -a 256 "$file" 2>/dev/null | awk '{print $1}')
 
-        for hash_name in "${!MALICIOUS_HASHES[@]}"; do
-            if [[ "$file_hash" == "${MALICIOUS_HASHES[$hash_name]}" ]]; then
-                log CRITICAL "Found malicious file hash match ($hash_name): $file"
-                echo "CRITICAL: Hash match $hash_name - $file" >> "$LOG_FILE"
+        for hash in "${MALICIOUS_HASHES[@]}"; do
+            if [[ "$file_hash" == "$hash" ]]; then
+                log CRITICAL "Found malicious file hash match: $file"
+                echo "CRITICAL: Hash match - $file ($file_hash)" >> "$LOG_FILE"
             fi
         done
     done

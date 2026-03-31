@@ -1,0 +1,5 @@
+# Security and DevOps scanning tools require review before modification
+.github/scripts/npm-axios-scanner.sh @owner
+.github/workflows/npm-axios-scan.yml @owner
+LICENSE @owner
+README.md @owner

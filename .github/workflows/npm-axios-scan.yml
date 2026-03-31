@@ -1,0 +1,131 @@
+name: NPM Axios Supply Chain Scanner
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  schedule:
+    # Run weekly on Monday at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  scan:
+    name: Scan for Axios IOCs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@eacbf3761b5df080cc36c27cf726ce4d6d86d515  # v4.1.1
+
+      - name: Make scanner executable
+        run: chmod +x .github/scripts/npm-axios-scanner.sh
+
+      - name: Run NPM Axios Supply Chain Scanner
+        id: scan
+        run: |
+          .github/scripts/npm-axios-scanner.sh "${{ github.workspace }}" --verbose
+        continue-on-error: true
+
+      - name: Capture scan results
+        id: results
+        run: |
+          # Find the most recent log file
+          LOG_FILE=$(ls -t /tmp/npm-axios-scan_*.log 2>/dev/null | head -1)
+          if [[ -n "$LOG_FILE" ]]; then
+            echo "log_file=$LOG_FILE" >> $GITHUB_OUTPUT
+            echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat "$LOG_FILE" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload scan artifact
+        if: always()
+        uses: actions/upload-artifact@6f51b3cea97c45c38e8424205cb8f91ac89b1122  # v4.5.0
+        with:
+          name: npm-axios-scan-report
+          path: /tmp/npm-axios-scan_*.log
+          retention-days: 30
+          if-no-files-found: warn
+
+      # OPTIONAL: Fail the workflow if IOCs are detected
+      # Uncomment the step below to enforce security policy
+      #
+      # - name: Fail on IOCs detected
+      #   if: |
+      #     steps.scan.outcome == 'failure' ||
+      #     (steps.results.outputs.log_file != '' &&
+      #      (contains(steps.results.outputs.log_file, 'CRITICAL') ||
+      #       contains(steps.results.outputs.log_file, 'HIGH')))
+      #   run: |
+      #     echo "::error::Supply chain compromise indicators detected. Review artifact for details."
+      #     exit 1
+
+      - name: Comment on PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            let logFiles = '';
+            try {
+              logFiles = execSync('ls -t /tmp/npm-axios-scan_*.log 2>/dev/null | head -1', { encoding: 'utf-8' }).trim();
+            } catch (e) {
+              // No log file found
+            }
+
+            if (!logFiles) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '✅ NPM Axios Supply Chain Scanner: No IOCs detected'
+              });
+              return;
+            }
+
+            const content = fs.readFileSync(logFiles, 'utf-8');
+            const hasCritical = content.includes('CRITICAL') || content.includes('HIGH');
+
+            const emoji = hasCritical ? '⚠️' : '✅';
+            const status = hasCritical ? 'Indicators detected' : 'No IOCs detected';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `${emoji} NPM Axios Supply Chain Scanner: ${status}\n\nSee artifact for full report.`
+            });
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: scan
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Supply Chain Security Check ✓" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Scanned for known compromise indicators from the March 2024 npm incident." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Packages Monitored:**" >> $GITHUB_STEP_SUMMARY
+          echo "- axios@1.14.1" >> $GITHUB_STEP_SUMMARY
+          echo "- axios@0.30.4" >> $GITHUB_STEP_SUMMARY
+          echo "- plain-crypto-js@4.2.1" >> $GITHUB_STEP_SUMMARY

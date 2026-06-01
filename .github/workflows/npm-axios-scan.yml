@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@eacbf3761b5df080cc36c27cf726ce4d6d86d515  # v4.1.1
+        uses: actions/checkout@v4  # auto-updates within v4.x
 
       - name: Make scanner executable
         run: chmod +x .github/scripts/npm-axios-scanner.sh
@@ -53,7 +53,7 @@ jobs:
 
       - name: Upload scan artifact
         if: always()
-        uses: actions/upload-artifact@6f51b3cea97c45c38e8424205cb8f91ac89b1122  # v4.5.0
+        uses: actions/upload-artifact@v4  # auto-updates within v4.x
         with:
           name: npm-axios-scan-report
           path: /tmp/npm-axios-scan_*.log
@@ -75,7 +75,7 @@ jobs:
 
       - name: Comment on PR with results
         if: github.event_name == 'pull_request' && always()
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        uses: actions/github-script@v7  # auto-updates within v7.x (v9+ has breaking changes)
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
